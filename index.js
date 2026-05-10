@@ -7,6 +7,7 @@ require('dotenv').config();
 
 const app = express();
 app.use(cors()); // Allows your separate website to talk to this API
+app.use(express.json());
 
 // Configure Cloudinary
 cloudinary.config({
@@ -66,6 +67,46 @@ app.get('/files', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Failed to fetch files from Cloudinary" });
+    }
+});
+
+// Helper function to extract Public ID from a Cloudinary URL
+const getPublicIdFromUrl = (url) => {
+    // Example URL: https://res.cloudinary.com/demo/image/upload/v12345/uploads/sample.jpg
+    // We need: uploads/sample
+    const parts = url.split('/');
+    const fileNameWithExtension = parts.pop(); // e.g., "sample.jpg"
+    const folder = parts.pop(); // e.g., "uploads"
+    const publicId = fileNameWithExtension.split('.')[0]; // e.g., "sample"
+    
+    return `${folder}/${publicId}`;
+};
+
+app.delete('/delete', async (req, res) => {
+    try {
+        const { fileUrl } = req.body;
+
+        if (!fileUrl) {
+            return res.status(400).json({ error: "No URL provided" });
+        }
+
+        const publicId = getPublicIdFromUrl(fileUrl);
+
+        // Determine if it's a video or image (Cloudinary needs this for deletion)
+        // If your URL contains "/video/", it's a video.
+        const resourceType = fileUrl.includes('/video/') ? 'video' : 'image';
+
+        const result = await cloudinary.uploader.destroy(publicId, {
+            resource_type: resourceType
+        });
+
+        if (result.result === 'ok') {
+            res.json({ success: true, message: "File deleted successfully" });
+        } else {
+            res.status(404).json({ success: false, message: "File not found or already deleted", details: result });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
